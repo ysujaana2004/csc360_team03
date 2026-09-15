@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
 import threading
 import time
 import urllib.request
@@ -144,46 +145,64 @@ def distributed_compute(payload: Dict[str, Any]) -> Dict[str, Any]:
         req = {k: v for k, v in req.items() if v is not None}
 
         t_call0 = time.perf_counter()
-        try:
-            resp = _post_json(url, req, timeout_s=3600)
-            t_call1 = time.perf_counter()
+        max_retries = 3
+        base_delay = 0.5  # seconds
+        last_error = None
+        
+        for attempt in range(max_retries):
+            try:
+                resp = _post_json(url, req, timeout_s=3600)
+                t_call1 = time.perf_counter()
 
-            if not resp.get("ok"):
-                raise RuntimeError(f"node {node['node_id']} error: {resp}")
-            
-            node_elapsed_s = float(resp.get("elapsed_seconds", 0.0))
-            print(f"Node ID: {node['node_id']} completed in: {node_elapsed_s}")
+                if not resp.get("ok"):
+                    raise RuntimeError(f"node {node['node_id']} error: {resp}")
+                
+                node_elapsed_s = float(resp.get("elapsed_seconds", 0.0))
+                print(f"Node ID: {node['node_id']} completed in: {node_elapsed_s}")
 
-            return {
-                "node_id": node["node_id"],
-                "node": {"host": host, "port": port, "cpu_count": node.get("cpu_count", 1)},
-                "slice": list(sl),
-                "round_trip_s": t_call1 - t_call0,
-                "node_elapsed_s": node_elapsed_s,
-                "node_sum_chunk_s": float(resp.get("sum_chunk_compute_seconds", 0.0)),
-                "total_primes": int(resp.get("total_primes", 0)),
-                "max_prime": int(resp.get("max_prime", -1)),
-                "primes": resp.get("primes", None),
-                "primes_truncated": bool(resp.get("primes_truncated", False)),
-                "failed": False,
-            }
-        except Exception as e:
-            t_call1 = time.perf_counter()
-            print(f"Node ID: {node['node_id']} failed: {e}")
-            return {
-                "node_id": node["node_id"],
-                "node": {"host": host, "port": port, "cpu_count": node.get("cpu_count", 1)},
-                "slice": list(sl),
-                "round_trip_s": t_call1 - t_call0,
-                "node_elapsed_s": 0.0,
-                "node_sum_chunk_s": 0.0,
-                "total_primes": 0,
-                "max_prime": -1,
-                "primes": None,
-                "primes_truncated": False,
-                "failed": True,
-                "error": str(e),
-            }
+                return {
+                    "node_id": node["node_id"],
+                    "node": {"host": host, "port": port, "cpu_count": node.get("cpu_count", 1)},
+                    "slice": list(sl),
+                    "round_trip_s": t_call1 - t_call0,
+                    "node_elapsed_s": node_elapsed_s,
+                    "node_sum_chunk_s": float(resp.get("sum_chunk_compute_seconds", 0.0)),
+                    "total_primes": int(resp.get("total_primes", 0)),
+                    "max_prime": int(resp.get("max_prime", -1)),
+                    "primes": resp.get("primes", None),
+                    "primes_truncated": bool(resp.get("primes_truncated", False)),
+                    "failed": False,
+                }
+            except (urllib.error.URLError, urllib.error.HTTPError, ConnectionError, TimeoutError) as e:
+                last_error = e
+                if attempt < max_retries - 1:
+                    # Exponential backoff with jitter to avoid thundering herd
+                    delay = base_delay * (2 ** attempt) + random.uniform(0, 0.5)
+                    print(f"Node ID: {node['node_id']} attempt {attempt + 1} failed: {e}, retrying in {delay:.2f}s")
+                    time.sleep(delay)
+                else:
+                    print(f"Node ID: {node['node_id']} all {max_retries} attempts failed: {e}")
+            except Exception as e:
+                # Non-retriable error (e.g., node returned bad response)
+                last_error = e
+                print(f"Node ID: {node['node_id']} non-retriable error: {e}")
+                break
+        
+        t_call1 = time.perf_counter()
+        return {
+            "node_id": node["node_id"],
+            "node": {"host": host, "port": port, "cpu_count": node.get("cpu_count", 1)},
+            "slice": list(sl),
+            "round_trip_s": t_call1 - t_call0,
+            "node_elapsed_s": 0.0,
+            "node_sum_chunk_s": 0.0,
+            "total_primes": 0,
+            "max_prime": -1,
+            "primes": None,
+            "primes_truncated": False,
+            "failed": True,
+            "error": str(last_error),
+        }
 
     with ThreadPoolExecutor(max_workers=min(32, len(nodes_sorted))) as ex:
         futs = [ex.submit(call_node, node, sl) for node, sl in zip(nodes_sorted, slices)]
