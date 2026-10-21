@@ -15,7 +15,7 @@ Each person lists a different plugin filename.
 | marina morcos  | marina.morcos92  | partitioning.py      | marina.morcos92                 |
 | Nischal Thapa  | nischal.thapa25  | write_completion.py  | nischal.thapa25                 |
 | Sujana Yeasmin | SUJANA.YEASMIN87 | request_routing.py   | SUJANA.YEASMIN87/request_routing |
-|                |                  |                      |                                 |
+| Sushanta Sapkota | sushanta.sapkota78 | leader_replication.py | sushanta.sapkota78/leader_replication |
 |                |                  |                      |                                 |
 
 ## Platform reminder
@@ -54,6 +54,15 @@ python3 -m platform.client --addr 127.0.0.1:9600 read alpha --partitioning SLOTS
 ```bash
 python3 -m platform.client --addr 127.0.0.1:9600 add-node n1 --key secret --mode ITEM
 ```
+
+---
+
+**Plugin file:** platform/plugins/leader_replication.py (Sushanta Sapkota)  
+**Modes we will implement:** SINGLE_LEADER, LEADERLESS, MULTI_LEADER  
+**Node key:** n0 is the leader (port 9600). n1 and n2 are follower nodes (ports 9601 and 9602).  
+**One history we will demo:** SINGLE_LEADER on three nodes. A Write sent to n1 is forwarded to n0 (alpha=one). Then we cut n0 off. A Write to n1 fails with a not leader error, a Write to n0 still works, and Read on n0 returns three.  
+**Commands:** See the leader_replication steps in the Demo section below.  
+**A mode combination that should fail, and the error Write or Read returns:** SINGLE_LEADER with the leader cut off. A Write on a follower node returns a not leader error.
 
 ## Tradeoffs
 
@@ -99,9 +108,9 @@ _Think Distributed Systems_ §8.4.5. Who may accept a Write if the network split
 
 | Mode          | Fault or change | What Write does | What Read returns on which node | What you gave up |
 | ------------- | --------------- | --------------- | ------------------------------- | ---------------- |
-| SINGLE_LEADER |                 |                 |                                 |                  |
-| LEADERLESS    |                 |                 |                                 |                  |
-| MULTI_LEADER  |                 |                 |                                 |                  |
+| SINGLE_LEADER | n0 is cut off from n1 and n2 | The follower nodes forward to n0, so they fail with a not leader error. n0 still accepts. | n0 returns the newest value. The follower nodes only have what was copied before the split. | Availability on the side without the leader |
+| LEADERLESS | Split {n0} vs {n1, n2} | alpha=L on n0 and alpha=R on n1 both succeed | n0 returns L, n1 returns R, n2 has nothing | Consistency: the nodes disagree until they are merged |
+| MULTI_LEADER | Split {n0} vs {n1, n2}, every node is a leader | alpha=A on n0 and alpha=B on n1 both succeed. n1 also copies B to n2. | n0 returns A, n1 and n2 return B | One agreed value: the two sides conflict and must be merged |
 
 ### conflicts.py
 
@@ -202,9 +211,40 @@ Numbered steps: processes to start, client commands, faults, and the output you 
    - Read `beta` on `n0`: `python3 -m platform.client --addr 127.0.0.1:9600 read beta`
      - Expected output: Empty until client sends directly to `n0`.
 
+**leader_replication.py** (SINGLE_LEADER). Run from week06/.
+
+1. Start three nodes, one terminal each. n0 is the leader, n1 and n2 are follower nodes.
+   ```bash
+   python3 -m platform.node --node-id n0 --port 9600 --config cluster.json
+   python3 -m platform.node --node-id n1 --port 9601 --config cluster.json
+   python3 -m platform.node --node-id n2 --port 9602 --config cluster.json
+   ```
+2. Write on n1, then read on n0.
+   ```bash
+   python3 -m platform.client --addr 127.0.0.1:9601 write alpha one --leader-replication SINGLE_LEADER
+   python3 -m platform.client --addr 127.0.0.1:9600 read alpha
+   ```
+   Expect ok=True owner=n0, then value=one.
+3. Cut n0 off. --isolate only blocks n0's own calls, so the follower nodes drop it too.
+   ```bash
+   python3 -m platform.client --addr 127.0.0.1:9600 fault --isolate on
+   python3 -m platform.client --addr 127.0.0.1:9601 fault --drop-to n0
+   python3 -m platform.client --addr 127.0.0.1:9602 fault --drop-to n0
+   ```
+4. Write on n1, write on n0, then read on n0.
+   ```bash
+   python3 -m platform.client --addr 127.0.0.1:9601 write alpha two --leader-replication SINGLE_LEADER
+   python3 -m platform.client --addr 127.0.0.1:9600 write alpha three --leader-replication SINGLE_LEADER
+   python3 -m platform.client --addr 127.0.0.1:9600 read alpha
+   ```
+   Expect ok=False with a not leader error, then ok=True, then value=three.
+5. Heal by running fault --isolate off on all three nodes.
+
 ## What we are not building this week
 
 We are not building dynamic gossip-based cluster membership, TLS encryption, an external routing proxy layer, or client-side routing table caching.
+
+For leader_replication.py: it does not pick a new leader when the old one is cut off (that is leader_election.py), and it does not merge the two sides after a split heals (that is conflicts.py).
 
 ## Git
 
