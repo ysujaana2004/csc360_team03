@@ -32,6 +32,23 @@ Repeat this block for each person.
 **Commands** (provided client, against a `node` cluster):  
 **A mode combination that should fail, and the error Write or Read returns:**  
 
+Plugin file (Marina Morcos):
+platform/plugins/partitioning.py
+Modes we will implement: HASH_MOD, SLOTS, KEY_RANGE, DIRECTORY, ITEM
+One history we will demo: Write keys alpha and beta to node n0 using SLOTS mode. Next, add a new node (n2) to the cluster using add-node. Because SLOTS is used, only a small fraction of keys (~1/(N+1)) move, leaving the rest on their original nodes. Reading alpha returns one from its correct newly assigned node owner.
+
+Commands:
+Bash
+python3 -m platform.client --addr 127.0.0.1:9600 write alpha one --partitioning SLOTS
+python3 -m platform.client --addr 127.0.0.1:9600 write beta two --partitioning SLOTS
+python3 -m platform.client --addr 127.0.0.1:9600 add-node n2
+python3 -m platform.client --addr 127.0.0.1:9600 read alpha --partitioning SLOTS
+
+A mode combination that should fail, and the error Write or Read returns: Attempting to pin a key to a node while using --partitioning ITEM mode:
+
+Bash
+python3 -m platform.client --addr 127.0.0.1:9600 add-node n1 --key secret --mode ITEM
+
 ## Tradeoffs
 
 For each mode you implement, name a fault or change — pause a node, split the network, add a node, two Writes at once — and fill the columns.
@@ -47,8 +64,8 @@ Keep the tables for the plugins your group owns; you can drop the others.
 | HASH_MOD | Node added (add-node) | Hashes key (hash(k) % N) and routes write to the computed owner node. | Returns value for the calculated hash owner node. | Not most efficient for Rebalancing|
 | KEY_RANGE | Range balance | Routes key based on key prefix/range bounds to its designated range owner. | Returns value from the node responsible for that lexicographical byte range. | Hotspotting on popular keys|
 | SLOTS | Node added (add-node) | Hashes key to a fixed slot range mapped across nodes. | Returns value from the node currently assigned to that key's slot. | It requires a lot of managment|
-| DIRECTORY | Node added / rebalance | Checks directory pin first; if pinned, goes to target node| Returns value from the pinned node | Decentralization (requires maintaining and sync'ing metadata for directory state).|
-| ITEM | Pin attempt | Rejects manual pin request (ok=false). Uses key-derived owner lookup. | Returns value from owner node derived strictly from key hash/range. | Manual key pinning flexibility|
+| DIRECTORY | Node added / rebalance | Checks directory pin first; if pinned, goes to target node| Returns value from the pinned node | Decentralization|
+| ITEM | Pin attempt | Rejects manual pin request (ok=false). Uses key-derived owner lookup. | Returns value from owner node derived strictly from key hash/range. | Manual key assignment flexibility|
 
 ### replication.py
 
