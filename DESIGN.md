@@ -16,7 +16,7 @@ Each person lists a different plugin filename.
 | Nischal Thapa  | nischal.thapa25  | write_completion.py  | nischal.thapa25                 |
 | Sujana Yeasmin | SUJANA.YEASMIN87 | request_routing.py   | SUJANA.YEASMIN87/request_routing |
 | Sushanta Sapkota | sushanta.sapkota78 | leader_replication.py | sushanta.sapkota78/leader_replication |
-|                |                  |                      |                                 |
+| Patience Divine Aimee IZERE | patiencedivineaimee.izere14 | processing_guarantees.py | PatienceIZERE |
 
 ## Platform reminder
 
@@ -57,12 +57,29 @@ python3 -m platform.client --addr 127.0.0.1:9600 add-node n1 --key secret --mode
 
 ---
 
-**Plugin file:** platform/plugins/leader_replication.py (Sushanta Sapkota)  
-**Modes we will implement:** SINGLE_LEADER, LEADERLESS, MULTI_LEADER  
-**Node key:** n0 is the leader (port 9600). n1 and n2 are follower nodes (ports 9601 and 9602).  
-**One history we will demo:** SINGLE_LEADER on three nodes. A Write sent to n1 is forwarded to n0 (alpha=one). Then we cut n0 off. A Write to n1 fails with a not leader error, a Write to n0 still works, and Read on n0 returns three.  
-**Commands:** See the leader_replication steps in the Demo section below.  
+**Plugin file:** platform/plugins/leader_replication.py (Sushanta Sapkota)
+**Modes we will implement:** SINGLE_LEADER, LEADERLESS, MULTI_LEADER
+**Node key:** n0 is the leader (port 9600). n1 and n2 are follower nodes (ports 9601 and 9602).
+**One history we will demo:** SINGLE_LEADER on three nodes. A Write sent to n1 is forwarded to n0 (alpha=one). Then we cut n0 off. A Write to n1 fails with a not leader error, a Write to n0 still works, and Read on n0 returns three.
+**Commands:** See the leader_replication steps in the Demo section below.
 **A mode combination that should fail, and the error Write or Read returns:** SINGLE_LEADER with the leader cut off. A Write on a follower node returns a not leader error.
+
+---
+
+**Plugin file:** `platform/plugins/processing_guarantees.py` (Patience Divine Aimee IZERE)
+**Modes we will implement:** `AT_MOST_ONCE`, `AT_LEAST_ONCE`, `EXACTLY_ONCE`, `resume LOG`, `resume SNAPSHOT`
+**One history we will demo:**
+A client sends a run with two steps: `alpha=one` and `beta=two` using `AT_LEAST_ONCE` mode. The run executes both steps successfully. Then we pause the node and send a resume command with `LOG` mode. The run resumes from the next unapplied step and completes. Reading `alpha` returns `one` and `beta` returns `two`.
+**Commands:**
+```bash
+python3 -m platform.client --addr 127.0.0.1:9600 run-start run1 --processing-guarantees AT_LEAST_ONCE --steps alpha=one,beta=two
+python3 -m platform.client --addr 127.0.0.1:9600 run-get run1
+python3 -m platform.client --addr 127.0.0.1:9600 run-resume run1 --resume LOG
+python3 -m platform.client --addr 127.0.0.1:9600 read alpha
+python3 -m platform.client --addr 127.0.0.1:9600 read beta
+```
+**A mode combination that should fail, and the error Write or Read returns:**
+Sending a run with `AT_MOST_ONCE` mode when a node crashes mid-processing: the run may skip that step, and subsequent reads may return empty or the previous value for that key.
 
 ## Tradeoffs
 
@@ -126,13 +143,13 @@ _Think Distributed Systems_ §9.3.3. After a split, two different values for one
 
 _Think Distributed Systems_ ch. 4. A step whose Write is in doubt (timeout or a killed process).
 
-| Mode            | Fault or change | What Write does | What Read returns on which node | What you gave up |
-| --------------- | --------------- | --------------- | ------------------------------- | ---------------- |
-| AT_MOST_ONCE    |                 |                 |                                 |                  |
-| AT_LEAST_ONCE   |                 |                 |                                 |                  |
-| EXACTLY_ONCE    |                 |                 |                                 |                  |
-| resume LOG      |                 |                 |                                 |                  |
-| resume SNAPSHOT |                 |                 |                                 |                  |
+| Mode            | Fault or change                          | What Write does                                                                 | What Read returns on which node                                                                 | What you gave up                       |
+| --------------- | ---------------------------------------- | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | -------------------------------------- |
+| AT_MOST_ONCE    | Network timeout during write             | Processes write once; if timeout occurs, may drop the write without retry.       | May return empty or previous value if write was lost.                                          | Guarantees data durability              |
+| AT_LEAST_ONCE   | Client retries after timeout             | Accepts duplicate writes; processes each retry, potentially storing same value.  | Returns the value (may be from any successful write, duplicates don't change outcome).          | Guarantees exactly-once semantics      |
+| EXACTLY_ONCE    | Client retries after timeout             | Uses idempotency key to deduplicate; only applies write once per key.           | Returns the value from the single successful write.                                             | Additional overhead for idempotency    |
+| resume LOG      | Node crash during processing             | Recovers by replaying the operation log from last checkpoint.                   | Returns value after log replay completes; state consistent with last committed log entry.      | Slower recovery for long logs          |
+| resume SNAPSHOT | Node crash during processing             | Recovers by loading latest snapshot and applying log entries since snapshot.    | Returns value quickly after snapshot load; may be slightly stale if log is large.              | Storage overhead for maintaining snapshots |
 
 ### request_routing.py
 
@@ -180,7 +197,7 @@ If you own one of these files, say a little more:
 
 - **replication.py:** for two Writes, what goes on the wire for state vs log vs snapshot catch-up
 - **conflicts.py:** the exact rule that turns two blobs into one, for each policy
-- **processing_guarantees.py:** the step list, the idempotency key, how resume from a log differs from resume from a snapshot
+- **processing_guarantees.py:** For `AT_MOST_ONCE`, the node processes the write once and does not retry on failure. For `AT_LEAST_ONCE`, the node accepts and processes all retries, potentially leading to duplicate writes. For `EXACTLY_ONCE`, the node uses an idempotency key (format: `run_id:step_index`) to deduplicate writes, ensuring each unique operation is applied only once. For `resume LOG`, the node replays the operation log from the last checkpoint to recover state. For `resume SNAPSHOT`, the node loads the latest snapshot and applies log entries since that snapshot to recover, which is faster for large logs but requires additional storage. Run records are stored in `node.runs` for durability across node pauses.
 - **atomic_commit.py:** the 2PC messages for keys `a` and `b`; how saga compensation restores `a`; what the plugin does if a participant is killed in prepare
 - **leader_election.py:** who wins, what a partition does, how Raft-style differs from Bully and Ring
 - **partitioning.py:** key → partition → node; which keys move when a node is added under slots vs `mod N`
@@ -239,6 +256,36 @@ Numbered steps: processes to start, client commands, faults, and the output you 
    ```
    Expect ok=False with a not leader error, then ok=True, then value=three.
 5. Heal by running fault --isolate off on all three nodes.
+
+**processing_guarantees.py** (AT_LEAST_ONCE with resume LOG). Run from week06/.
+
+1. Start a single node.
+   ```bash
+   python3 -m platform.node --node-id n0 --port 9600 --config cluster.json
+   ```
+2. Start a run with two steps using AT_LEAST_ONCE mode.
+   ```bash
+   python3 -m platform.client --addr 127.0.0.1:9600 run-start run1 --processing-guarantees AT_LEAST_ONCE --steps alpha=one,beta=two
+   ```
+   Expect ok=True state=running next_step=2 applied=[0,1].
+3. Check run status.
+   ```bash
+   python3 -m platform.client --addr 127.0.0.1:9600 run-get run1
+   ```
+   Expect ok=True state=running next_step=2 applied=[0,1].
+4. Verify the values were written.
+   ```bash
+   python3 -m platform.client --addr 127.0.0.1:9600 read alpha
+   python3 -m platform.client --addr 127.0.0.1:9600 read beta
+   ```
+   Expect both to return their respective values.
+5. Pause the node and resume with LOG mode (simulating crash recovery).
+   ```bash
+   python3 -m platform.client --addr 127.0.0.1:9600 fault --pause on
+   python3 -m platform.client --addr 127.0.0.1:9600 run-resume run1 --resume LOG
+   python3 -m platform.client --addr 127.0.0.1:9600 fault --pause off
+   ```
+   Expect the run to complete successfully since all steps were already applied.
 
 ## What we are not building this week
 
