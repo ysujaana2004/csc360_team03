@@ -10,13 +10,13 @@ The roster is how the group records who owns which plugin.
 
 Each person lists a different plugin filename.
 
-| Student name | CUNY alias | Plugin filename | Feature branch |
-| --- | --- | --- | --- |
-| marina morcos | marina.morcos92 | partitioning.py |  marina.morcos92 |
-|  |  |  |  |
-|  |  |  |  |
-|  |  |  |  |
-|  |  |  |  |
+| Student name  | CUNY alias      | Plugin filename     | Feature branch  |
+| ------------- | --------------- | ------------------- | --------------- |
+| marina morcos | marina.morcos92 | partitioning.py     | marina.morcos92 |
+| Nischal Thapa |                 | write_completion.py | nischal.thapa25 |
+|               |                 |                     |                 |
+|               |                 |                     |                 |
+|               |                 |                     |                 |
 
 ## Platform reminder
 
@@ -30,7 +30,7 @@ Repeat this block for each person.
 **Modes we will implement** (see that plugin’s section in `week06/README.md`):  
 **One history we will demo** (the fault or change, the Writes/Reads, the bytes you expect on which node):  
 **Commands** (provided client, against a `node` cluster):  
-**A mode combination that should fail, and the error Write or Read returns:**  
+**A mode combination that should fail, and the error Write or Read returns:**
 
 Plugin file (Marina Morcos):
 platform/plugins/partitioning.py
@@ -57,107 +57,107 @@ Keep the tables for the plugins your group owns; you can drop the others.
 
 ### partitioning.py
 
-*Think Distributed Systems* ch. 7; *Designing Data-Intensive Applications* ch. 7. Where a key lives, and which keys move when you add a node. HASH_MOD remaps most keys; SLOTS moves about `1/(N+1)`; KEY_RANGE keeps neighbors together; DIRECTORY pin holds; ITEM has no pin. `N` is `len(node.nodes)`.
+_Think Distributed Systems_ ch. 7; _Designing Data-Intensive Applications_ ch. 7. Where a key lives, and which keys move when you add a node. HASH_MOD remaps most keys; SLOTS moves about `1/(N+1)`; KEY_RANGE keeps neighbors together; DIRECTORY pin holds; ITEM has no pin. `N` is `len(node.nodes)`.
 
-| Mode | Fault or change | What Write does | What Read returns on which node | What you gave up |
-| --- | --- | --- | --- | --- |
-| HASH_MOD | Node added (add-node) | Hashes key (hash(k) % N) and routes write to the computed owner node. | Returns value for the calculated hash owner node. | Not most efficient for Rebalancing|
-| KEY_RANGE | Range balance | Routes key based on key prefix/range bounds to its designated range owner. | Returns value from the node responsible for that lexicographical byte range. | Hotspotting on popular keys|
-| SLOTS | Node added (add-node) | Hashes key to a fixed slot range mapped across nodes. | Returns value from the node currently assigned to that key's slot. | It requires a lot of managment|
-| DIRECTORY | Node added / rebalance | Checks directory pin first; if pinned, goes to target node| Returns value from the pinned node | Decentralization|
-| ITEM | Pin attempt | Rejects manual pin request (ok=false). Uses key-derived owner lookup. | Returns value from owner node derived strictly from key hash/range. | Manual key assignment flexibility|
+| Mode      | Fault or change        | What Write does                                                            | What Read returns on which node                                              | What you gave up                   |
+| --------- | ---------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------- |
+| HASH_MOD  | Node added (add-node)  | Hashes key (hash(k) % N) and routes write to the computed owner node.      | Returns value for the calculated hash owner node.                            | Not most efficient for Rebalancing |
+| KEY_RANGE | Range balance          | Routes key based on key prefix/range bounds to its designated range owner. | Returns value from the node responsible for that lexicographical byte range. | Hotspotting on popular keys        |
+| SLOTS     | Node added (add-node)  | Hashes key to a fixed slot range mapped across nodes.                      | Returns value from the node currently assigned to that key's slot.           | It requires a lot of managment     |
+| DIRECTORY | Node added / rebalance | Checks directory pin first; if pinned, goes to target node                 | Returns value from the pinned node                                           | Decentralization                   |
+| ITEM      | Pin attempt            | Rejects manual pin request (ok=false). Uses key-derived owner lookup.      | Returns value from owner node derived strictly from key hash/range.          | Manual key assignment flexibility  |
 
 ### replication.py
 
-*Think Distributed Systems* §8.4.4. What a copy on the wire looks like, and how a node that was down catches up.
+_Think Distributed Systems_ §8.4.4. What a copy on the wire looks like, and how a node that was down catches up.
 
-| Mode | Fault or change | What Write does | What Read returns on which node | What you gave up |
-| --- | --- | --- | --- | --- |
-| STATE |  |  |  |  |
-| LOG |  |  |  |  |
-| LOG_WITH_SNAPSHOT |  |  |  |  |
+| Mode              | Fault or change | What Write does | What Read returns on which node | What you gave up |
+| ----------------- | --------------- | --------------- | ------------------------------- | ---------------- |
+| STATE             |                 |                 |                                 |                  |
+| LOG               |                 |                 |                                 |                  |
+| LOG_WITH_SNAPSHOT |                 |                 |                                 |                  |
 
 ### write_completion.py
 
-*Think Distributed Systems* §8.4.3; *Database Internals* ch. 11. When Write returns vs whether every member has the bytes. W is 1, majority of current membership (`N//2 + 1`), or all `N`.
+_Think Distributed Systems_ §8.4.3; _Database Internals_ ch. 11. When Write returns vs whether every member has the bytes. W is 1, majority of current membership (`N//2 + 1`), or all `N`.
 
-| Mode | Fault or change | What Write does | What Read returns on which node | What you gave up |
-| --- | --- | --- | --- | --- |
-| ACK_ALL |  |  |  |  |
-| ACK_ONE |  |  |  |  |
-| ACK_QUORUM |  |  |  |  |
+| Mode       | Fault or change | What Write does | What Read returns on which node | What you gave up |
+| ---------- | --------------- | --------------- | ------------------------------- | ---------------- |
+| ACK_ALL    |                 |                 |                                 |                  |
+| ACK_ONE    |                 |                 |                                 |                  |
+| ACK_QUORUM |                 |                 |                                 |                  |
 
 ### leader_replication.py
 
-*Think Distributed Systems* §8.4.5. Who may accept a Write if the network splits.
+_Think Distributed Systems_ §8.4.5. Who may accept a Write if the network splits.
 
-| Mode | Fault or change | What Write does | What Read returns on which node | What you gave up |
-| --- | --- | --- | --- | --- |
-| SINGLE_LEADER |  |  |  |  |
-| LEADERLESS |  |  |  |  |
-| MULTI_LEADER |  |  |  |  |
+| Mode          | Fault or change | What Write does | What Read returns on which node | What you gave up |
+| ------------- | --------------- | --------------- | ------------------------------- | ---------------- |
+| SINGLE_LEADER |                 |                 |                                 |                  |
+| LEADERLESS    |                 |                 |                                 |                  |
+| MULTI_LEADER  |                 |                 |                                 |                  |
 
 ### conflicts.py
 
-*Think Distributed Systems* §9.3.3. After a split, two different values for one key.
+_Think Distributed Systems_ §9.3.3. After a split, two different values for one key.
 
-| Mode | Fault or change | What Write does | What Read returns on which node | What you gave up |
-| --- | --- | --- | --- | --- |
-| OP_CRDT |  |  |  |  |
-| STATE_CRDT |  |  |  |  |
-| APP_RECONCILE |  |  |  |  |
+| Mode          | Fault or change | What Write does | What Read returns on which node | What you gave up |
+| ------------- | --------------- | --------------- | ------------------------------- | ---------------- |
+| OP_CRDT       |                 |                 |                                 |                  |
+| STATE_CRDT    |                 |                 |                                 |                  |
+| APP_RECONCILE |                 |                 |                                 |                  |
 
 ### processing_guarantees.py
 
-*Think Distributed Systems* ch. 4. A step whose Write is in doubt (timeout or a killed process).
+_Think Distributed Systems_ ch. 4. A step whose Write is in doubt (timeout or a killed process).
 
-| Mode | Fault or change | What Write does | What Read returns on which node | What you gave up |
-| --- | --- | --- | --- | --- |
-| AT_MOST_ONCE |  |  |  |  |
-| AT_LEAST_ONCE |  |  |  |  |
-| EXACTLY_ONCE |  |  |  |  |
-| resume LOG |  |  |  |  |
-| resume SNAPSHOT |  |  |  |  |
+| Mode            | Fault or change | What Write does | What Read returns on which node | What you gave up |
+| --------------- | --------------- | --------------- | ------------------------------- | ---------------- |
+| AT_MOST_ONCE    |                 |                 |                                 |                  |
+| AT_LEAST_ONCE   |                 |                 |                                 |                  |
+| EXACTLY_ONCE    |                 |                 |                                 |                  |
+| resume LOG      |                 |                 |                                 |                  |
+| resume SNAPSHOT |                 |                 |                                 |                  |
 
 ### request_routing.py
 
-*Designing Data-Intensive Applications* ch. 7 (request routing). A Write sent to a node that no longer owns the key.
+_Designing Data-Intensive Applications_ ch. 7 (request routing). A Write sent to a node that no longer owns the key.
 
-| Mode | Fault or change | What Write does | What Read returns on which node | What you gave up |
-| --- | --- | --- | --- | --- |
-| FORWARD |  |  |  |  |
-| DIRECTORY_TIER |  |  |  |  |
-| CLIENT_AWARE |  |  |  |  |
+| Mode           | Fault or change | What Write does | What Read returns on which node | What you gave up |
+| -------------- | --------------- | --------------- | ------------------------------- | ---------------- |
+| FORWARD        |                 |                 |                                 |                  |
+| DIRECTORY_TIER |                 |                 |                                 |                  |
+| CLIENT_AWARE   |                 |                 |                                 |                  |
 
 ### leader_election.py
 
 Leader election (Bully, ring, majority/term). The leader is killed, or the members are split. Majority for RAFT_STYLE is `N//2 + 1` of current membership.
 
-| Mode | Fault or change | What Write does | What Read returns on which node | What you gave up |
-| --- | --- | --- | --- | --- |
-| BULLY |  |  |  |  |
-| RING |  |  |  |  |
-| RAFT_STYLE |  |  |  |  |
+| Mode       | Fault or change | What Write does | What Read returns on which node | What you gave up |
+| ---------- | --------------- | --------------- | ------------------------------- | ---------------- |
+| BULLY      |                 |                 |                                 |                  |
+| RING       |                 |                 |                                 |                  |
+| RAFT_STYLE |                 |                 |                                 |                  |
 
 ### session_models.py
 
-*Database Internals* ch. 11 (session models). Two Reads of the same key after a Write, possibly on different nodes.
+_Database Internals_ ch. 11 (session models). Two Reads of the same key after a Write, possibly on different nodes.
 
-| Mode | Fault or change | What Write does | What Read returns on which node | What you gave up |
-| --- | --- | --- | --- | --- |
-| READ_OWN_WRITES |  |  |  |  |
-| MONOTONIC_READS |  |  |  |  |
-| NO_SESSION |  |  |  |  |
+| Mode            | Fault or change | What Write does | What Read returns on which node | What you gave up |
+| --------------- | --------------- | --------------- | ------------------------------- | ---------------- |
+| READ_OWN_WRITES |                 |                 |                                 |                  |
+| MONOTONIC_READS |                 |                 |                                 |                  |
+| NO_SESSION      |                 |                 |                                 |                  |
 
 ### atomic_commit.py
 
-*Think Distributed Systems* ch. 6 (2PC); saga compensation. Two keys, and a crash in the middle.
+_Think Distributed Systems_ ch. 6 (2PC); saga compensation. Two keys, and a crash in the middle.
 
-| Mode | Fault or change | What Write does | What Read returns on which node | What you gave up |
-| --- | --- | --- | --- | --- |
-| TWO_PC |  |  |  |  |
-| SAGA |  |  |  |  |
-| SINGLE_KEY_ONLY |  |  |  |  |
+| Mode            | Fault or change | What Write does | What Read returns on which node | What you gave up |
+| --------------- | --------------- | --------------- | ------------------------------- | ---------------- |
+| TWO_PC          |                 |                 |                                 |                  |
+| SAGA            |                 |                 |                                 |                  |
+| SINGLE_KEY_ONLY |                 |                 |                                 |                  |
 
 ## Protocol notes
 
