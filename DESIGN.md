@@ -12,7 +12,7 @@ Each person lists a different plugin filename.
 
 | Student name | CUNY alias | Plugin filename | Feature branch |
 | --- | --- | --- | --- |
-|  |  |  |  |
+| marina morcos | marina.morcos92 | partitioning.py |  marina.morcos92 |
 |  |  |  |  |
 |  |  |  |  |
 |  |  |  |  |
@@ -44,11 +44,11 @@ Keep the tables for the plugins your group owns; you can drop the others.
 
 | Mode | Fault or change | What Write does | What Read returns on which node | What you gave up |
 | --- | --- | --- | --- | --- |
-| HASH_MOD |  |  |  |  |
-| KEY_RANGE |  |  |  |  |
-| SLOTS |  |  |  |  |
-| DIRECTORY |  |  |  |  |
-| ITEM |  |  |  |  |
+| HASH_MOD | Node added (add-node) | Hashes key (hash(k) % N) and routes write to the computed owner node. | Returns value for the calculated hash owner node. | Not most efficient for Rebalancing|
+| KEY_RANGE | Range balance | Routes key based on key prefix/range bounds to its designated range owner. | Returns value from the node responsible for that lexicographical byte range. | Hotspotting on popular keys|
+| SLOTS | Node added (add-node) | Hashes key to a fixed slot range mapped across nodes. | Returns value from the node currently assigned to that key's slot. | It requires a lot of managment|
+| DIRECTORY | Node added / rebalance | Checks directory pin first; if pinned, goes to target node| Returns value from the pinned node | Decentralization (requires maintaining and sync'ing metadata for directory state).|
+| ITEM | Pin attempt | Rejects manual pin request (ok=false). Uses key-derived owner lookup. | Returns value from owner node derived strictly from key hash/range. | Manual key pinning flexibility|
 
 ### replication.py
 
