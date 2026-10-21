@@ -13,7 +13,7 @@ Each person lists a different plugin filename.
 | Student name  | CUNY alias      | Plugin filename     | Feature branch  |
 | ------------- | --------------- | ------------------- | --------------- |
 | marina morcos | marina.morcos92 | partitioning.py     | marina.morcos92 |
-| Nischal Thapa |                 | write_completion.py | nischal.thapa25 |
+| Nischal Thapa | nischal.thapa25 | write_completion.py | nischal.thapa25 |
 |               |                 |                     |                 |
 |               |                 |                     |                 |
 |               |                 |                     |                 |
