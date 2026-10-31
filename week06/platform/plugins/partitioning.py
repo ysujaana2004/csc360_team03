@@ -1,11 +1,4 @@
-"""Which node stores a key, and what AddNode / pin do to that map.
-
-In the readings: partitioning / sharding — Think Distributed Systems ch. 7;
-Designing Data-Intensive Applications ch. 7.
-
-See week06/README.md. Useful imports: ``from platform import node_pb2``
-and ``from platform.util import mode, RpcFailed``.
-"""
+"""Which node stores a key, and what AddNode / pin do to that map."""
 from __future__ import annotations
 
 import zlib
@@ -14,73 +7,90 @@ from platform.node import Node
 
 from .base import PluginBase
 
+
+def _order(nodes):
+    # same ordering node.py uses, so n10 sorts after n2
+    return sorted(nodes, key=lambda x: (len(x), x))
+
+
 class Plugin(PluginBase):
     def owner(self, node: Node, key: bytes, mode: str) -> str:
-        nodes = sorted(node.nodes)
-        N = len(nodes)
-        if N == 0:
+        nodes = _order(node.nodes)
+        n = len(nodes)
+        if n == 0:
             return ""
 
-        key_hash = zlib.crc32(key)
+        h = zlib.crc32(key)
 
         if mode == "HASH_MOD":
-            return nodes[key_hash % N]
+            return nodes[h % n]
 
-        elif mode == "SLOTS":
-            NUM_SLOTS = 1024
-            slot_id = key_hash % NUM_SLOTS
-            node_index = (slot_id * N) // NUM_SLOTS
-            return nodes[node_index]
+        if mode == "SLOTS":
+            slots = getattr(node, "n_slots", 32) or 32
+            slot = h % slots
+            return nodes[(slot * n) // slots]
 
-        elif mode == "KEY_RANGE":
-            first_byte = key[0] if key else 0
-            node_index = (first_byte * N) // 256
-            return nodes[node_index]
+        if mode == "KEY_RANGE":
+            first = key[0] if key else 0
+            return nodes[(first * n) // 256]
 
-        elif mode == "DIRECTORY":
-            pins = getattr(node, "pins", {})
-            if key in pins:
-                return pins[key]
-            return nodes[key_hash % N]
+        if mode == "DIRECTORY":
+            pinned = node.directory.get(key)
+            if pinned:
+                return pinned
+            return nodes[h % n]
 
-        elif mode == "ITEM":
-            return nodes[key_hash % N]
+        if mode == "ITEM":
+            return nodes[h % n]
 
-        return nodes[0]
+        return nodes[0]  # no mode set yet: boot default (first node)
 
     def on_add_node(self, node: Node, request: node_pb2.AddNodeRequest) -> node_pb2.StatusResponse:
-        if not hasattr(node, "pins"):
-            node.pins = {}
-
-        if request.peer and request.peer not in node.nodes:
-            node.nodes.append(request.peer)
-        if request.node_id and request.node_id not in node.nodes:
-            node.nodes.append(request.node_id)
-
+        part = request.modes.partitioning or node.last_partitioning
         ok = True
-        if request.key:
-            current_mode = getattr(request, "mode", "DIRECTORY")
-            if current_mode == "ITEM":
-                ok = False
-            else:
-                node.pins[request.key] = request.target_node or request.node_id
 
-        modes = node_pb2.Modes(partitioning=getattr(request, "mode", "HASH_MOD"))
-        self.rebalance(node, modes)
+        with node.lock:
+            if request.node_id and request.node_id not in node.nodes:
+                node.nodes.append(request.node_id)
+                node.nodes.sort(key=lambda x: (len(x), x))
+            if request.node_id and request.host:
+                node.peers[request.node_id] = (request.host, int(request.port or 0))
+            if request.modes.partitioning:
+                node.last_partitioning = request.modes.partitioning
 
-        return node_pb2.StatusResponse(ok=ok)
+            if request.pin_key:
+                if part == "DIRECTORY" and request.node_id:
+                    node.directory[request.pin_key] = request.node_id
+                else:
+                    ok = False  # pins only work in DIRECTORY mode
+
+        self.rebalance(node, node_pb2.Modes(partitioning=part))
+
+        st = node.status_now()
+        st.ok = ok
+        return st
 
     def rebalance(self, node: Node, modes: node_pb2.Modes) -> None:
-        current_keys = list(node.store.keys())
+        part = modes.partitioning or node.last_partitioning
+        if not part:
+            return
+        if modes.partitioning:
+            node.last_partitioning = modes.partitioning
 
-        for key in current_keys:
-            target_owner = self.owner(node, key, modes.partitioning)
-            
-            if target_owner and target_owner != node.node_id:
-                val = node.store[key]
-                write_req = node_pb2.WriteRequest(key=key, value=val)
-                try:
-                    node.rpc(target_owner, "Write", write_req)
-                    del node.store[key]
-                except Exception:
-                    pass
+        with node.lock:
+            items = list(node.store.items())
+
+        for key, val in items:
+            target = self.owner(node, key, part)
+            if not target or target == node.node_id:
+                continue
+            req = node_pb2.WriteRequest(
+                key=key, value=val, modes=node_pb2.Modes(partitioning=part)
+            )
+            try:
+                resp = node.rpc(target, "Write", req)
+            except Exception:
+                continue
+            if getattr(resp, "ok", False):
+                with node.lock:
+                    node.store.pop(key, None)
