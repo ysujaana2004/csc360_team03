@@ -15,7 +15,7 @@ Each person lists a different plugin filename.
 | marina morcos  | marina.morcos92  | partitioning.py      | marina.morcos92                 |
 | Nischal Thapa  | nischal.thapa25  | write_completion.py  | nischal.thapa25                 |
 | Sujana Yeasmin | SUJANA.YEASMIN87 | request_routing.py   | SUJANA.YEASMIN87/request_routing |
-| Sushanta Sapkota | sushanta.sapkota78 | leader_replication.py | sushanta.sapkota78/leader_replication |
+| Sushanta Sapkota | sushanta.sapkota78 | leader_replication.py | sushanta.sapkota78 |
 | Patience Divine Aimee IZERE | patiencedivineaimee.izere14 | processing_guarantees.py | PatienceIZERE |
 
 ## Platform reminder
