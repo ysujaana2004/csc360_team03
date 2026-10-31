@@ -9,7 +9,6 @@ from .base import PluginBase
 
 
 def _order(nodes):
-    # same ordering node.py uses, so n10 sorts after n2
     return sorted(nodes, key=lambda x: (len(x), x))
 
 
@@ -43,7 +42,7 @@ class Plugin(PluginBase):
         if mode == "ITEM":
             return nodes[h % n]
 
-        return nodes[0]  # no mode set yet: boot default (first node)
+        return nodes[0]  
 
     def on_add_node(self, node: Node, request: node_pb2.AddNodeRequest) -> node_pb2.StatusResponse:
         part = request.modes.partitioning or node.last_partitioning
@@ -62,7 +61,7 @@ class Plugin(PluginBase):
                 if part == "DIRECTORY" and request.node_id:
                     node.directory[request.pin_key] = request.node_id
                 else:
-                    ok = False  # pins only work in DIRECTORY mode
+                    ok = False  
 
         self.rebalance(node, node_pb2.Modes(partitioning=part))
 
